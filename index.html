@@ -162,47 +162,74 @@
   function startBGM(){
     if (!audioCtx) setupAudio();
     if (bgmRunning || state.muted) return;
-    const tempo = 120; // bpm
-    const beat = 60/tempo;
 
-    // Make a looping arpeggio with two square oscillators
-    const loopLen = 8 * beat;
+    const tempo = 140; // より楽しい雰囲気に少しテンポアップ
+    const beat = 60/tempo;
     const now = audioCtx.currentTime + 0.05;
 
-    function makeSquare(freq, start, dur, gain=0.25){
+    // 汎用トーン生成
+    function tone(type, freq, start, dur, vol){
       const osc = audioCtx.createOscillator();
       const g = audioCtx.createGain();
-      osc.type = 'square';
-      osc.frequency.value = freq;
-      g.gain.value = 0;
-      osc.connect(g).connect(bgmGain);
+      osc.type = type; osc.frequency.value = freq;
+      g.gain.value = 0; osc.connect(g).connect(bgmGain);
       g.gain.setValueAtTime(0, start);
-      g.gain.linearRampToValueAtTime(gain, start + 0.01);
+      g.gain.linearRampToValueAtTime(vol, start + 0.008);
       g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
-      osc.start(start);
-      osc.stop(start + dur + 0.05);
+      osc.start(start); osc.stop(start + dur + 0.05);
     }
 
-    // Sequence (C minor vibe)
-    const notes = [261.63, 311.13, 392.00, 523.25]; // C, Eb, G, C
-    const bass = [130.81, 98.00, 146.83, 123.47]; // C, G2, D, B♭
+    // ワンショットのドラム（キック＆ハット風）
+    function kick(start){ tone('sine', 80, start, 0.12, 0.35); }
+    function hat(start){
+      const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate*0.05, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i=0;i<data.length;i++){ data[i] = (Math.random()*2-1) * (1 - i/data.length); }
+      const src = audioCtx.createBufferSource();
+      const g = audioCtx.createGain(); g.gain.value = 0.18;
+      src.buffer = buffer; src.connect(g).connect(bgmGain);
+      src.start(start);
+    }
 
-    // schedule 4 bars
-    for (let bar=0; bar<4; bar++){
-      const t0 = now + bar*2*beat;
-      const b = bass[bar % bass.length];
-      // bass on downbeats
-      makeSquare(b, t0, 0.25);
-      makeSquare(b, t0 + beat, 0.25);
+    // 明るいコード進行: C-G-Am-F（I-V-vi-IV）
+    const chords = [
+      [261.63, 329.63, 392.00], // C E G
+      [196.00, 246.94, 392.00], // G B D (voicing)
+      [220.00, 261.63, 329.63], // A C E
+      [174.61, 220.00, 261.63], // F A C
+    ];
 
-      // arpeggio 1/8ths
-      for (let i=0;i<8;i++){
-        const f = notes[i % notes.length] * (1 + (bar%2?0:0));
-        makeSquare(f, t0 + i*(beat/2), 0.18, 0.18);
+    // 2小節ループ
+    const bars = 4; // 4小節（1周）
+    const barLen = 4*beat; // 4拍
+    for (let bar=0; bar<bars; bar++){
+      const t0 = now + bar*barLen;
+      const chord = chords[bar % chords.length];
+
+      // バス（triangleで軽快に）
+      tone('triangle', chord[0]/2, t0 + 0*beat, 0.20, 0.28);
+      tone('triangle', chord[0]/2, t0 + 2*beat, 0.20, 0.28);
+
+      // 8分ハイハット
+      for (let i=0;i<8;i++){ hat(t0 + i*(beat/2)); }
+
+      // リード（メロディ）
+      const lead = [0,1,2,1, 0,1,2,3]; // 度数っぽい動き
+      for (let i=0;i<lead.length;i++){
+        const n = chord[i%chord.length];
+        tone('square', n*2, t0 + i*(beat/2), 0.17, 0.22);
       }
+
+      // コードの刻み（裏で和音感）
+      for (let i=0;i<4;i++){
+        for (const n of chord){ tone('square', n, t0 + i*beat + beat*0.5, 0.13, 0.12); }
+      }
+
+      // キック（4つ打ち）
+      for (let i=0;i<4;i++){ kick(t0 + i*beat); }
     }
 
-    // simple loop using setInterval re-scheduling
+    const loopLen = bars*barLen;
     const interval = setInterval(() => {
       if (!bgmRunning || state.muted) { clearInterval(interval); return; }
       startBGM();
@@ -210,7 +237,7 @@
 
     bgmRunning = true;
   }
-  function stopBGM(){ bgmRunning = false; }
+  function stopBGM(){ bgmRunning = false; }(){ bgmRunning = false; }
 
   muteBtn.addEventListener('click', async () => {
     state.muted = !state.muted;
@@ -234,8 +261,10 @@
     const maxSize = Math.max(44, Math.min(78, w*0.12));
     const size = rand(minSize, maxSize);
     const x = rand(size/2, w - size/2);
-    const speed = rand(120, 220) + state.time*3; // scale with time
+    // ▼ 落下速度をゆっくりに（時間による伸びも弱め）
+    const speed = rand(65, 120) + state.time*1.2;
     state.blocks.push({ x, y: -size, w: size, h: size, vy: speed });
+  });
   }
 
   function collideCircleRect(cx, cy, r, rx, ry, rw, rh){
@@ -303,7 +332,7 @@
 
     // spawn logic: rate rises with time
     state.spawnAcc += dt;
-    const spawnEvery = Math.max(160, 800 - state.time*4); // ms
+    const spawnEvery = Math.max(320, 1100 - state.time*2); // ms
     while (state.spawnAcc > spawnEvery) { state.spawnAcc -= spawnEvery; spawnBlock(); }
 
     // move blocks
