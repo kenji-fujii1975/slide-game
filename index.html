@@ -232,7 +232,21 @@
     ctx.fillStyle='#dc2626'; ctx.beginPath(); ctx.ellipse(-bodyW*0.9,-bodyH*0.05,bodyW*0.25,bodyH*0.25,0,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.ellipse(bodyW*0.9,-bodyH*0.05,bodyW*0.25,bodyH*0.25,0,0,Math.PI*2); ctx.fill(); ctx.restore(); }
 
   function drawSnake(x,y,w,h,rot){ ctx.save(); ctx.translate(x,y); ctx.rotate(rot); const len=h*1.2, thick=h*0.28; // long vertical segment
-    const grad=ctx.createLinearGradient(0,-len/2,0,len/2); grad.addColorStop(0,'#22c55e'); grad.addColorStop(1,'#15803d'); ctx.fillStyle=grad; ctx.beginPath(); ctx.roundRect(-thick/2, -len/2, thick, len, thick*0.5); ctx.fill(); // head
+    const grad=ctx.createLinearGradient(0,-len/2,0,len/2); grad.addColorStop(0,'#22c55e'); grad.addColorStop(1,'#15803d'); ctx.fillStyle=grad; ctx.beginPath(); (function(){
+      const rr = Math.min(thick*0.5, Math.abs(thick/2));
+      ctx.beginPath();
+      ctx.moveTo(-thick/2 + rr, -len/2);
+      ctx.lineTo(thick/2 - rr, -len/2);
+      ctx.arc(thick/2 - rr, -len/2 + rr, rr, -Math.PI/2, 0);
+      ctx.lineTo(thick/2, len/2 - rr);
+      ctx.arc(thick/2 - rr, len/2 - rr, rr, 0, Math.PI/2);
+      ctx.lineTo(-thick/2 + rr, len/2);
+      ctx.arc(-thick/2 + rr, len/2 - rr, rr, Math.PI/2, Math.PI);
+      ctx.lineTo(-thick/2, -len/2 + rr);
+      ctx.arc(-thick/2 + rr, -len/2 + rr, rr, Math.PI, -Math.PI/2);
+      ctx.closePath();
+      ctx.fill();
+    })(); // head
     ctx.fillStyle='#16a34a'; ctx.beginPath(); ctx.ellipse(0,-len/2, thick*0.9, thick*0.9, 0, 0, Math.PI*2); ctx.fill(); ctx.fillStyle='black'; ctx.beginPath(); ctx.arc(-thick*0.25, -len/2, thick*0.12, 0, Math.PI*2); ctx.arc(thick*0.25, -len/2, thick*0.12, 0, Math.PI*2); ctx.fill(); ctx.restore(); }
 
   function draw(){
@@ -334,7 +348,7 @@
   }
 
   startBtn.addEventListener('click', startGame);
-  window.addEventListener('pointerdown', ()=>{ if(!audioCtx) setupAudio(); audioCtx?.resume(); }, {once:true});
+  window.addEventListener('pointerdown', ()=>{ if(!audioCtx) setupAudio(); (audioCtx && audioCtx.resume()); }, {once:true});
 })();
 </script>
 </body>
