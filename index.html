@@ -89,9 +89,9 @@
 
   // -------- Stage config (constant speeds per stage) --------
   const STAGES = [
-    { name: 'STAGE 1', secs: 30, bg: '#0a2a6b', bg2:'#1d4ed8', enemy:'turtle', speed:[14,20], spawnEvery: 1000 },
-    { name: 'STAGE 2', secs: 30, bg: '#064e3b', bg2:'#16a34a', enemy:'crab',   speed:[16,22], spawnEvery: 950 },
-    { name: 'STAGE 3', secs: 30, bg: '#000000', bg2:'#111827', enemy:'snake',  speed:[18,24], spawnEvery: 900 },
+    { name: 'STAGE 1', secs: 30, bg: '#0a2a6b', bg2:'#1d4ed8', enemy:'turtle', speed:[21,30], spawnEvery: 1000 },
+    { name: 'STAGE 2', secs: 30, bg: '#064e3b', bg2:'#16a34a', enemy:'crab',   speed:[24,33], spawnEvery: 950 },
+    { name: 'STAGE 3', secs: 30, bg: '#000000', bg2:'#111827', enemy:'snake',  speed:[27,36], spawnEvery: 900 },
   ];
 
   // -------- State --------
@@ -198,7 +198,32 @@
     ctx.restore();
   }
 
-  function drawTurtle(x,y,w,h,rot){ ctx.save(); ctx.translate(x,y); ctx.rotate(rot); const shellGrad=ctx.createLinearGradient(0,-h/2,0,h/2); shellGrad.addColorStop(0,'#0f9f6e'); shellGrad.addColorStop(1,'#065f46'); ctx.fillStyle=shellGrad; ctx.beginPath(); ctx.ellipse(0,0,w/2,h/2,0,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='rgba(255,255,255,0.15)'; ctx.lineWidth=1; ctx.strokeRect(-w*0.35,-h*0.25,w*0.7,h*0.5); ctx.fillStyle='#16a34a'; ctx.beginPath(); ctx.ellipse(w*0.55,-h*0.05,w*0.18,h*0.18,0,0,Math.PI*2); ctx.fill(); ctx.fillStyle='black'; ctx.beginPath(); ctx.arc(w*0.67,-h*0.08,Math.max(1.5,w*0.025),0,Math.PI*2); ctx.fill(); ctx.fillStyle='#16a34a'; ['-0.45,-0.45','0.05,-0.45','-0.35,0.45','0.05,0.45'].forEach(s=>{ const [sx,sy]=s.split(',').map(Number); ctx.beginPath(); ctx.ellipse(w*sx,h*sy,w*0.14,h*0.18,0,0,Math.PI*2); ctx.fill(); }); ctx.restore(); }
+  function drawTurtle(x,y,w,h,rot){
+    // 画像風のシンプルなシルエット（提供の参考画像に寄せた形）
+    ctx.save(); ctx.translate(x,y); ctx.rotate(rot);
+    const color = '#0f172a'; // 濃紺シルエット
+    ctx.fillStyle = color; ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = Math.max(1, w*0.02);
+
+    // 胴（甲羅：縦楕円）
+    ctx.beginPath(); ctx.ellipse(0, 0, w*0.38, h*0.48, 0, 0, Math.PI*2); ctx.fill();
+
+    // 頭
+    ctx.beginPath(); ctx.ellipse(0, -h*0.58, w*0.14, h*0.14, 0, 0, Math.PI*2); ctx.fill();
+
+    // 前ヒレ（左右）
+    ctx.beginPath(); ctx.ellipse(-w*0.55, -h*0.15, w*0.35, h*0.18, -0.35, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse( w*0.55, -h*0.15, w*0.35, h*0.18,  0.35, 0, Math.PI*2); ctx.fill();
+
+    // 後ろ足（左右）
+    ctx.beginPath(); ctx.ellipse(-w*0.28,  h*0.55, w*0.18, h*0.18, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse( w*0.28,  h*0.55, w*0.18, h*0.18, 0, 0, Math.PI*2); ctx.fill();
+
+    // 甲羅模様を細線で（シンプルに）
+    ctx.beginPath(); ctx.moveTo(0, -h*0.45); ctx.lineTo(0, h*0.45); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(0, 0, w*0.26, h*0.34, 0, 0, Math.PI*2); ctx.stroke();
+
+    ctx.restore();
+  }); ctx.restore(); }
 
   function drawCrab(x,y,w,h,rot){ ctx.save(); ctx.translate(x,y); ctx.rotate(rot); const bodyW=w*0.7, bodyH=h*0.6; ctx.fillStyle='#ef4444'; ctx.beginPath(); ctx.ellipse(0,0,bodyW/2,bodyH/2,0,0,Math.PI*2); ctx.fill(); // eyes
     ctx.fillStyle='white'; ctx.beginPath(); ctx.arc(-bodyW*0.15,-bodyH*0.6,bodyH*0.12,0,Math.PI*2); ctx.arc(bodyW*0.15,-bodyH*0.6,bodyH*0.12,0,Math.PI*2); ctx.fill(); ctx.fillStyle='black'; ctx.beginPath(); ctx.arc(-bodyW*0.15,-bodyH*0.6,bodyH*0.06,0,Math.PI*2); ctx.arc(bodyW*0.15,-bodyH*0.6,bodyH*0.06,0,Math.PI*2); ctx.fill(); // legs
@@ -227,7 +252,13 @@
 
     // input
     const target = (touchingLeft? -1:0) + (touchingRight? 1:0) + (tiltEnabled? state.input.tilt*1.2 : 0);
-    const accel=2.6; const prevVx=state.player.vx; state.player.vx += target*accel*dt/16.67; state.player.vx *= 0.88; state.player.x += (state.player.vx*dt)/w; state.player.x = clamp(state.player.x,0.05,0.95);
+    const accel=1.5; const prevVx=state.player.vx; state.player.vx += target*accel*dt/16.67; 
+    // 速度上限（左右ボタンで一気に端へ行かないように）
+    const maxVx = 0.35 * w / 1000; // 1秒で画面幅の35%
+    if (state.player.vx >  maxVx) state.player.vx =  maxVx;
+    if (state.player.vx < -maxVx) state.player.vx = -maxVx;
+    state.player.vx *= 0.92; // 摩擦を強めて減速気味に
+    state.player.x += (state.player.vx*dt)/w; state.player.x = clamp(state.player.x,0.05,0.95);
     if (Math.sign(prevVx)!==Math.sign(state.player.vx) && (touchingLeft||touchingRight||Math.abs(state.input.tilt)>0.05)) sfxMove();
 
     // spawn (fixed per stage)
