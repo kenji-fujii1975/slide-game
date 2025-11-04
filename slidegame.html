@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Dodge Blocks</title>
+  <style>
+    :root {
+      --bg: #0b0f1a;
+      --fg: #e2e8f0;
+      --accent: #5eead4;
+      --accent2: #a78bfa;
+      --danger: #fb7185;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin:0; height:100%; background: var(--bg); color:var(--fg); font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Hiragino Kaku Gothic ProN", Meiryo, "Noto Sans JP", sans-serif; }
+    #wrap { position:fixed; inset:0; display:grid; grid-template-rows: 1fr auto; }
+    canvas { width:100%; height:100%; display:block; background: radial-gradient(1200px 800px at 50% -200px, #12203a, #0b0f1a 60%); }
+
+    /* HUD */
+    .hud { position: fixed; inset: env(safe-area-inset-top) 0 auto 0; padding: 8px 12px; display:flex; justify-content:space-between; align-items:center; pointer-events:none; }
+    .badge { background: rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); padding: 6px 10px; border-radius: 999px; font-variant-numeric: tabular-nums; box-shadow: 0 2px 12px rgba(0,0,0,0.25); }
+
+    /* Center overlay */
+    .overlay { position: fixed; inset:0; display:grid; place-items:center; background: linear-gradient(180deg, rgba(5,8,15,0.55), rgba(5,8,15,0.85)); backdrop-filter: blur(4px); }
+    .card { width:min(92vw, 520px); border-radius: 20px; padding: 20px; background: rgba(14,18,30,0.9); border:1px solid rgba(255,255,255,0.15); box-shadow: 0 10px 30px rgba(0,0,0,0.4); }
+    .card h1 { margin: 6px 0 12px; font-size: clamp(20px, 5vw, 28px); letter-spacing: 0.02em; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .btn { pointer-events:auto; appearance:none; border:none; border-radius: 14px; padding: 12px 16px; font-size: 16px; font-weight: 700; color:#0b0f1a; background: var(--accent); box-shadow: 0 4px 14px rgba(0,0,0,0.25), inset 0 -2px 0 rgba(0,0,0,0.25); }
+    .btn.secondary { background: var(--accent2); color:#0b0f1a; }
+    .btn.ghost { background: rgba(255,255,255,0.1); color: var(--fg); border:1px solid rgba(255,255,255,0.15); }
+    .btn:active { transform: translateY(1px); }
+
+    .controlsHint { position: fixed; inset:auto 0 env(safe-area-inset-bottom) 0; display:flex; justify-content:space-between; align-items:center; pointer-events:none; padding: 16px; opacity: 0.85; font-size: 12px; color: #cbd5e1; }
+    .controlsHint .zone { width: 46%; text-align:center; padding: 10px 0; border: 1px dashed rgba(255,255,255,0.18); border-radius: 14px; background: rgba(255,255,255,0.03); }
+
+    a.small { color: var(--accent); text-decoration: none; font-weight: 600; }
+    .muted { color:#94a3b8; font-size: 13px; }
+  </style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+</div>
+
+<div class="hud">
+  <div class="badge" id="score">SCORE 0000</div>
+  <div class="badge" id="best">BEST 0000</div>
+</div>
+
+<div class="overlay" id="menu">
+  <div class="card">
+    <h1>🚀 Dodge Blocks</h1>
+    <p class="muted">上から降ってくるブロックを左右に避け続けよう。長く生き残るほどスコアUP！</p>
+    <ul class="muted" style="margin: 0 0 12px 1.2em; line-height:1.6">
+      <li>画面左/右をタッチで移動</li>
+      <li>または<strong>傾き操作</strong>も使えます（iOSの許可が必要）</li>
+      <li>BGMはファミコン風チップチューン</li>
+    </ul>
+    <div class="row" style="margin-top:8px">
+      <button class="btn" id="startBtn">START</button>
+      <button class="btn secondary" id="tiltBtn">Enable Tilt</button>
+      <button class="btn ghost" id="muteBtn">🔈 BGM</button>
+    </div>
+    <p class="muted" style="margin-top:12px">GitHub PagesにこのHTMLを置くだけで遊べます。<br>
+      <a class="small" href="#" id="howTo">操作ヒントを表示</a>
+    </p>
+  </div>
+</div>
+
+<div class="controlsHint" id="touchHints" style="display:none">
+  <div class="zone">⬅️ LEFT</div>
+  <div class="zone">RIGHT ➡️</div>
+</div>
+
+<script>
+(() => {
+  const cv = document.getElementById('game');
+  const ctx = cv.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const menu = document.getElementById('menu');
+  const startBtn = document.getElementById('startBtn');
+  const tiltBtn = document.getElementById('tiltBtn');
+  const muteBtn = document.getElementById('muteBtn');
+  const touchHints = document.getElementById('touchHints');
+  const howTo = document.getElementById('howTo');
+
+  // DPR-aware canvas sizing
+  const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  function resize() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    cv.width = Math.floor(w * dpr);
+    cv.height = Math.floor(h * dpr);
+    cv.style.width = w + 'px';
+    cv.style.height = h + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize, { passive: true });
+  resize();
+
+  // Game state
+  const state = {
+    running: false,
+    time: 0,
+    last: performance.now(),
+    score: 0,
+    best: parseInt(localStorage.getItem('db_best')||'0',10),
+    player: { x: 0.5, y: 0.85, r: 14, vx: 0 },
+    blocks: [],
+    spawnAcc: 0,
+    input: { left:false, right:false, tilt:0 },
+    muted: false,
+  };
+  bestEl.textContent = `BEST ${state.best.toString().padStart(4,'0')}`;
+
+  // Input: touch zones
+  let touchingLeft = false, touchingRight = false;
+  function onTouch(e){
+    if (!state.running) return;
+    for (const t of e.touches) {
+      const half = window.innerWidth/2;
+      if (t.clientX < half) touchingLeft = true; else touchingRight = true;
+    }
+  }
+  function onEnd(){ touchingLeft=false; touchingRight=false; }
+  window.addEventListener('touchstart', onTouch, {passive:true});
+  window.addEventListener('touchmove', onTouch, {passive:true});
+  window.addEventListener('touchend', onEnd, {passive:true});
+  window.addEventListener('touchcancel', onEnd, {passive:true});
+
+  // Optional: tilt controls (iOS permissioned)
+  let tiltEnabled = false;
+  tiltBtn.addEventListener('click', async () => {
+    try {
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        const perm = await DeviceMotionEvent.requestPermission();
+        if (perm !== 'granted') throw new Error('permission denied');
+      }
+      window.addEventListener('devicemotion', (ev) => {
+        // gamma-like horizontal accel; clamp
+        const ax = ev.accelerationIncludingGravity ? ev.accelerationIncludingGravity.x || 0 : 0;
+        state.input.tilt = Math.max(-1, Math.min(1, -ax/5));
+      });
+      tiltEnabled = true;
+      tiltBtn.textContent = 'Tilt ✅';
+    } catch(e){
+      alert('デバイスの傾き取得が許可されませんでした');
+    }
+  });
+
+  // WebAudio: simple chiptune-style BGM
+  let audioCtx, bgmGain, bgmRunning = false;
+  function setupAudio(){
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    bgmGain = audioCtx.createGain();
+    bgmGain.gain.value = 0.12;
+    bgmGain.connect(audioCtx.destination);
+  }
+  function startBGM(){
+    if (!audioCtx) setupAudio();
+    if (bgmRunning || state.muted) return;
+    const tempo = 120; // bpm
+    const beat = 60/tempo;
+
+    // Make a looping arpeggio with two square oscillators
+    const loopLen = 8 * beat;
+    const now = audioCtx.currentTime + 0.05;
+
+    function makeSquare(freq, start, dur, gain=0.25){
+      const osc = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      g.gain.value = 0;
+      osc.connect(g).connect(bgmGain);
+      g.gain.setValueAtTime(0, start);
+      g.gain.linearRampToValueAtTime(gain, start + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+      osc.start(start);
+      osc.stop(start + dur + 0.05);
+    }
+
+    // Sequence (C minor vibe)
+    const notes = [261.63, 311.13, 392.00, 523.25]; // C, Eb, G, C
+    const bass = [130.81, 98.00, 146.83, 123.47]; // C, G2, D, B♭
+
+    // schedule 4 bars
+    for (let bar=0; bar<4; bar++){
+      const t0 = now + bar*2*beat;
+      const b = bass[bar % bass.length];
+      // bass on downbeats
+      makeSquare(b, t0, 0.25);
+      makeSquare(b, t0 + beat, 0.25);
+
+      // arpeggio 1/8ths
+      for (let i=0;i<8;i++){
+        const f = notes[i % notes.length] * (1 + (bar%2?0:0));
+        makeSquare(f, t0 + i*(beat/2), 0.18, 0.18);
+      }
+    }
+
+    // simple loop using setInterval re-scheduling
+    const interval = setInterval(() => {
+      if (!bgmRunning || state.muted) { clearInterval(interval); return; }
+      startBGM();
+    }, loopLen*1000);
+
+    bgmRunning = true;
+  }
+  function stopBGM(){ bgmRunning = false; }
+
+  muteBtn.addEventListener('click', async () => {
+    state.muted = !state.muted;
+    muteBtn.textContent = state.muted ? '🔇 MUTED' : '🔈 BGM';
+    if (!audioCtx) setupAudio();
+    if (state.muted) stopBGM(); else startBGM();
+  });
+
+  // Game helpers
+  function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+  function rand(a,b){ return a + Math.random()*(b-a); }
+
+  function reset(){
+    state.time = 0; state.score = 0; state.blocks.length = 0; state.spawnAcc = 0;
+    state.player.x = 0.5; state.player.vx = 0; touchingLeft = touchingRight = false;
+  }
+
+  function spawnBlock(){
+    const w = window.innerWidth, h = window.innerHeight;
+    const minSize = Math.max(20, Math.min(38, w*0.04));
+    const maxSize = Math.max(44, Math.min(78, w*0.12));
+    const size = rand(minSize, maxSize);
+    const x = rand(size/2, w - size/2);
+    const speed = rand(120, 220) + state.time*3; // scale with time
+    state.blocks.push({ x, y: -size, w: size, h: size, vy: speed });
+  }
+
+  function collideCircleRect(cx, cy, r, rx, ry, rw, rh){
+    const nx = clamp(cx, rx, rx+rw);
+    const ny = clamp(cy, ry, ry+rh);
+    const dx = cx - nx, dy = cy - ny;
+    return (dx*dx + dy*dy) <= r*r;
+  }
+
+  function draw(){
+    const w = window.innerWidth, h = window.innerHeight;
+    ctx.clearRect(0,0,w,h);
+
+    // grid background
+    ctx.globalAlpha = 0.06;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    for (let y=0; y<h; y+=32){
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+    }
+    for (let x=0; x<w; x+=32){
+      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // player
+    const px = state.player.x * w;
+    const py = state.player.y * h;
+    const pr = state.player.r;
+    const grad = ctx.createRadialGradient(px, py, 3, px, py, pr);
+    grad.addColorStop(0, '#5eead4');
+    grad.addColorStop(1, '#0ea5e9');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI*2); ctx.fill();
+
+    // blocks
+    for (const b of state.blocks){
+      const gx = ctx.createLinearGradient(b.x, b.y, b.x, b.y + b.h);
+      gx.addColorStop(0, '#a78bfa');
+      gx.addColorStop(1, '#7c3aed');
+      ctx.fillStyle = gx;
+      ctx.fillRect(b.x - b.w/2, b.y, b.w, b.h);
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.strokeRect(b.x - b.w/2 + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+    }
+
+    // vignette
+    const vg = ctx.createRadialGradient(w/2, h*0.4, Math.min(w,h)*0.1, w/2, h/2, Math.max(w,h)*0.8);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,0.35)');
+    ctx.fillStyle = vg; ctx.fillRect(0,0,w,h);
+  }
+
+  function update(dt){
+    const w = window.innerWidth, h = window.innerHeight;
+
+    // input
+    const target = (touchingLeft? -1:0) + (touchingRight? 1:0) + (tiltEnabled? state.input.tilt*1.2 : 0);
+    const accel = 2.6; // px/ms^2 in normalized space
+    state.player.vx += target * accel * dt / 16.67;
+    // friction
+    state.player.vx *= 0.88;
+    state.player.x += (state.player.vx * dt) / w;
+    state.player.x = clamp(state.player.x, 0.05, 0.95);
+
+    // spawn logic: rate rises with time
+    state.spawnAcc += dt;
+    const spawnEvery = Math.max(160, 800 - state.time*4); // ms
+    while (state.spawnAcc > spawnEvery) { state.spawnAcc -= spawnEvery; spawnBlock(); }
+
+    // move blocks
+    for (const b of state.blocks){ b.y += b.vy * dt/1000; }
+    // remove offscreen
+    state.blocks = state.blocks.filter(b => b.y < h + b.h);
+
+    // collisions
+    const px = state.player.x * w, py = state.player.y * h, pr = state.player.r;
+    for (const b of state.blocks){
+      if (collideCircleRect(px, py, pr, b.x - b.w/2, b.y, b.w, b.h)){
+        endGame();
+        return;
+      }
+    }
+
+    // score by time survived
+    state.time += dt;
+    state.score = Math.floor(state.time / 10);
+    scoreEl.textContent = `SCORE ${state.score.toString().padStart(4,'0')}`;
+  }
+
+  function gameLoop(t){
+    if (!state.running) return;
+    const now = performance.now();
+    let dt = now - state.last; if (dt > 80) dt = 80; // clamp
+    state.last = now;
+    update(dt);
+    draw();
+    requestAnimationFrame(gameLoop);
+  }
+
+  function startGame(){
+    reset();
+    state.running = true;
+    state.last = performance.now();
+    menu.style.display = 'none';
+    touchHints.style.display = 'flex';
+    if (!state.muted) { setupAudio(); audioCtx.resume(); startBGM(); }
+    requestAnimationFrame(gameLoop);
+  }
+
+  function endGame(){
+    state.running = false;
+    stopBGM();
+    touchHints.style.display = 'none';
+    if (state.score > state.best){ state.best = state.score; localStorage.setItem('db_best', String(state.best)); }
+    bestEl.textContent = `BEST ${state.best.toString().padStart(4,'0')}`;
+
+    // show end overlay
+    const again = document.createElement('div');
+    again.className = 'overlay';
+    again.innerHTML = `
+      <div class="card">
+        <h1>Game Over 💥</h1>
+        <p class="muted">Score: <strong>${state.score}</strong></p>
+        <div class="row" style="margin-top:8px">
+          <button class="btn" id="againBtn">RETRY</button>
+          <button class="btn ghost" id="shareBtn">Share</button>
+        </div>
+      </div>`;
+    document.body.appendChild(again);
+    document.getElementById('againBtn').addEventListener('click', () => { document.body.removeChild(again); startGame(); });
+    document.getElementById('shareBtn').addEventListener('click', async () => {
+      const text = `Dodge Blocksで${state.score}点！`;
+      if (navigator.share){ try { await navigator.share({ text }); } catch(e){} }
+      else { navigator.clipboard?.writeText(text); alert('スコアをコピーしました！'); }
+    });
+
+    // show main menu again below
+    menu.style.display = 'grid';
+  }
+
+  startBtn.addEventListener('click', () => {
+    startGame();
+  });
+
+  howTo.addEventListener('click', (e) => {
+    e.preventDefault();
+    touchHints.style.display = touchHints.style.display === 'none' ? 'flex' : 'none';
+  });
+
+  // First user gesture primes audio
+  window.addEventListener('pointerdown', () => { if (!audioCtx) setupAudio(); audioCtx.resume(); }, { once:true });
+})();
+</script>
+</body>
+</html>
