@@ -198,29 +198,42 @@
     ctx.restore();
   }
 
-  function drawTurtle(x,y,w,h,rot){
-    // 画像風のシンプルなシルエット（提供の参考画像に寄せた形）
-    ctx.save(); ctx.translate(x,y); ctx.rotate(rot);
-    const color = '#0f172a'; // 濃紺シルエット
-    ctx.fillStyle = color; ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = Math.max(1, w*0.02);
+  function drawTurtle(x, y, w, h, rot){
+    // 元のデザイン（緑の甲羅グラデ＋頭と足）に戻す
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
 
-    // 胴（甲羅：縦楕円）
-    ctx.beginPath(); ctx.ellipse(0, 0, w*0.38, h*0.48, 0, 0, Math.PI*2); ctx.fill();
+    // shell (gradient)
+    const shellGrad = ctx.createLinearGradient(0, -h/2, 0, h/2);
+    shellGrad.addColorStop(0, '#0f9f6e');
+    shellGrad.addColorStop(1, '#065f46');
+    ctx.fillStyle = shellGrad;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, w/2, h/2, 0, 0, Math.PI*2);
+    ctx.fill();
 
-    // 頭
-    ctx.beginPath(); ctx.ellipse(0, -h*0.58, w*0.14, h*0.14, 0, 0, Math.PI*2); ctx.fill();
+    // scutes (simple rectangle lines)
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-w*0.35, -h*0.25, w*0.7, h*0.5);
 
-    // 前ヒレ（左右）
-    ctx.beginPath(); ctx.ellipse(-w*0.55, -h*0.15, w*0.35, h*0.18, -0.35, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse( w*0.55, -h*0.15, w*0.35, h*0.18,  0.35, 0, Math.PI*2); ctx.fill();
+    // head
+    ctx.fillStyle = '#16a34a';
+    ctx.beginPath();
+    ctx.ellipse(w*0.55, -h*0.05, w*0.18, h*0.18, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle='black';
+    ctx.beginPath();
+    ctx.arc(w*0.67, -h*0.08, Math.max(1.5, w*0.025), 0, Math.PI*2);
+    ctx.fill();
 
-    // 後ろ足（左右）
-    ctx.beginPath(); ctx.ellipse(-w*0.28,  h*0.55, w*0.18, h*0.18, 0, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse( w*0.28,  h*0.55, w*0.18, h*0.18, 0, 0, Math.PI*2); ctx.fill();
-
-    // 甲羅模様を細線で（シンプルに）
-    ctx.beginPath(); ctx.moveTo(0, -h*0.45); ctx.lineTo(0, h*0.45); ctx.stroke();
-    ctx.beginPath(); ctx.ellipse(0, 0, w*0.26, h*0.34, 0, 0, Math.PI*2); ctx.stroke();
+    // legs (4 ellipses)
+    ctx.fillStyle = '#16a34a';
+    ctx.beginPath(); ctx.ellipse(-w*0.35, -h*0.45, w*0.14, h*0.18, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse( w*0.05, -h*0.45, w*0.14, h*0.18, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(-w*0.35,  h*0.45, w*0.14, h*0.18, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse( w*0.05,  h*0.45, w*0.14, h*0.18, 0, 0, Math.PI*2); ctx.fill();
 
     ctx.restore();
   }); ctx.restore(); }
